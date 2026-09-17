@@ -1,0 +1,22 @@
+{
+  "name": "marine-debris-detection-prototype",
+  "version": "1.0.0",
+  "description": "SIH26057 - AI-Powered Automated Underwater Marine Debris Detection System using Side-Scan Sonar Imagery",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "python backend/main.py",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend start"
+  },
+  "keywords": [
+    "sonar",
+    "marine-debris",
+    "yolov8-seg",
+    "sih2026",
+    "fastapi",
+    "nextjs"
+  ],
+  "author": "SIH26057 Team",
+  "license": "MIT"
+}

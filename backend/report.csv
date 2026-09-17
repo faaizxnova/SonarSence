@@ -1,0 +1,2 @@
+id,class,threat,confidence,latitude,longitude,length_m,width_m,height_m,volume_m3,slant_range_m
+0,discarded_tires_reef,LOW,0.92,17.722032,83.311921,4.98,4.98,2.051,50.866,24.0

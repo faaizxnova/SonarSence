@@ -1,0 +1,279 @@
+/*
+ * SonarSense — Hydrographic Survey Dashboard
+ * =================================================================
+ * Clean, light, high-contrast professional theme with bold typography.
+ *
+ * Token discipline: every colour used in a component must resolve to a
+ * variable defined here. The one exception is the sonar/radar canvas
+ * and inline-SVG drawing code, which cannot read CSS custom properties
+ * (the Canvas2D API needs a literal colour string) — those draw calls
+ * import their palette from `src/lib/theme.ts`, which is kept in sync
+ * with the `--viz-*` and `--surface-viewport*` tokens below by hand.
+ * If you change one, change the other.
+ */
+
+@import "tailwindcss";
+
+/* Route Tailwind's `font-sans` / `font-mono` utilities to the fonts
+   next/font actually loads — without this, every `font-mono` class in
+   the app (used throughout for coordinates, confidences, dimensions)
+   silently fell back to the browser's default monospace stack. */
+@theme inline {
+  --font-sans: var(--font-sora);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+:root {
+  /* Light slate palette — app chrome (headers, panels, cards, sidebars) */
+  --bg-primary: #F4F6F9;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #EEF2F7;
+  --bg-elevated: #FFFFFF;
+
+  /* Ocean-blue accent */
+  --accent-primary: #0369A1;
+  --accent-secondary: #075985;
+  /* Amber "live" accent — reserved for the AUV live-scan indicator only */
+  --accent-live: #D97706;
+
+  /* Threat level colors */
+  --threat-high: #B91C1C;
+  --threat-medium: #B45309;
+  --threat-low: #4D7C0F;
+  --threat-unknown: #6D28D9;
+
+  /* Typography */
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+
+  /* Borders & Shadows */
+  --border-subtle: #E2E8F0;
+  --border-accent: #0369A1;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.10);
+
+  /* Focus ring — must stay visible against both light chrome and dark viewports */
+  --focus-ring: #0369A1;
+
+  /* Dark viewport surfaces — deliberate, for the sonar waterfall and radar
+     map canvases only. Survey software convention: instrument feeds read
+     dark regardless of the surrounding chrome theme. */
+  --surface-viewport: #0B1220;
+  --surface-viewport-alt: #0F1C2E;
+  --surface-viewport-border: #334155;
+  --surface-viewport-text: #E2E8F0;
+  --surface-viewport-text-muted: #94A3B8;
+
+  /* Skeleton loading */
+  --skeleton-base: #E9EDF3;
+  --skeleton-shine: #F6F8FB;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sora), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 500;
+  margin: 0;
+  padding: 0;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Visible keyboard focus ring everywhere, chrome and viewport alike */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Panel */
+.glass-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--accent-primary);
+  color: #ffffff;
+  font-weight: 700;
+  font-family: var(--font-sora), sans-serif;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: background 0.15s, transform 0.1s;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
+}
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-family: var(--font-sora), sans-serif;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: background 0.15s;
+  box-shadow: var(--shadow-sm);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: #CBD5E1;
+}
+
+.btn-danger {
+  background: #FEF2F2;
+  color: #B91C1C;
+  font-weight: 700;
+  font-family: var(--font-sora), sans-serif;
+  font-size: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid #FCA5A5;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: background 0.15s;
+  box-shadow: var(--shadow-sm);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #B91C1C;
+  border-color: #B91C1C;
+  color: #ffffff;
+}
+
+/* Status Badges */
+.status-badge {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid transparent;
+}
+.status-operational {
+  background: #ECFCCB;
+  color: #3F6212;
+  border-color: #BEF264;
+}
+.status-processing {
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-color: #93C5FD;
+}
+.status-error {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-color: #FCA5A5;
+}
+.threat-high {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-color: #FCA5A5;
+}
+.threat-medium {
+  background: #FEF3C7;
+  color: #B45309;
+  border-color: #FCD34D;
+}
+.threat-low {
+  background: #ECFCCB;
+  color: #3F6212;
+  border-color: #BEF264;
+}
+.threat-unknown {
+  background: #EDE9FE;
+  color: #6D28D9;
+  border-color: #C4B5FD;
+}
+
+/* Spinners */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* Skeleton loading blocks */
+@keyframes skeletonShine {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--skeleton-base) 25%, var(--skeleton-shine) 37%, var(--skeleton-base) 63%);
+  background-size: 400px 100%;
+  animation: skeletonShine 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .animate-fadeIn, .spinner {
+    animation-duration: 0.001ms !important;
+  }
+}
