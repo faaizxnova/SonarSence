@@ -17,6 +17,7 @@ interface ControlPanelProps {
   onScenarioChange: (scenarioId: string) => void;
   onUpload: (file?: File | null) => void;
   onAnalyze: () => void;
+  onStartDemo: () => void;
   onGenerateDossier: () => void;
   onDownloadJSON: () => void;
   onDownloadCSV: () => void;
@@ -33,6 +34,7 @@ export default function ControlPanel({
   onScenarioChange,
   onUpload,
   onAnalyze,
+  onStartDemo,
   onGenerateDossier,
   onDownloadJSON,
   onDownloadCSV,
@@ -190,6 +192,23 @@ export default function ControlPanel({
             </svg>
           )}
           {isProcessing ? "Processing..." : "Run AI Pipeline"}
+        </button>
+
+        {/* ── Start Demo Button ── */}
+        <button
+          className="btn-secondary !text-xs cursor-pointer flex items-center gap-1.5 !border-sky-500/60 !text-sky-400 hover:!bg-sky-500/10"
+          onClick={() => {
+            playSonarPing();
+            onStartDemo();
+          }}
+          disabled={isProcessing}
+          title="Auto-play all 7 pipeline stages for the selected dataset"
+          aria-label="Start demo walkthrough"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <polygon points="5,3 19,12 5,21" />
+          </svg>
+          Start Demo
         </button>
 
         {/* 3D MVB Modal Button */}

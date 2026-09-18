@@ -16,7 +16,7 @@
  * laptop or a narrow projector output.
  */
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 
 import ControlPanel from "@/components/ControlPanel";
 import SonarWaterfall from "@/components/SonarWaterfall";
@@ -54,6 +54,8 @@ export default function DashboardPage() {
   // Bumped whenever a pipeline run finishes, so the waterfall refetches its
   // stage imagery instead of keeping the frame from the previous dataset.
   const [resultVersion, setResultVersion] = useState(0);
+  // Ref to cancel any in-progress demo tour timers
+  const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isSimulated = geojson?.metadata.data_source === "simulated";
 
@@ -148,6 +150,49 @@ export default function DashboardPage() {
     loadScenario(selectedScenario);
   }, [loadScenario, selectedScenario]);
 
+  // ── Start Demo Handler ──
+  // 1. Run the pipeline for the selected scenario (or default to ghost net)
+  // 2. Once results arrive, walk through stages Raw → TVG → SRAD → Lee →
+  //    Slant → YOLOv8 → MVB at 1.2 s each, ending on the MVB stage.
+  const handleStartDemo = useCallback(async () => {
+    // Cancel any previous tour
+    if (demoTimerRef.current) {
+      clearInterval(demoTimerRef.current);
+      demoTimerRef.current = null;
+    }
+
+    const demoScenario = selectedScenario === "custom_upload" ? "gost_net1" : selectedScenario;
+    setCustomImageSrc(null);
+    setSelectedScenario(demoScenario);
+    setSelectedDetection(null);
+    setPipelineStage("raw");
+
+    // Run full pipeline (handles its own errors internally via loadScenario)
+    await loadScenario(demoScenario);
+
+    // Animate through all 7 pipeline stages at 1.2 s each
+    const STAGES: PipelineStage[] = ["raw", "tvg", "srad", "lee", "corrected", "annotated", "mvb"];
+    let idx = 0;
+    setPipelineStage(STAGES[0]);
+
+    demoTimerRef.current = setInterval(() => {
+      idx += 1;
+      if (idx >= STAGES.length) {
+        clearInterval(demoTimerRef.current!);
+        demoTimerRef.current = null;
+        return;
+      }
+      setPipelineStage(STAGES[idx]);
+    }, 1200);
+  }, [selectedScenario, loadScenario]);
+
+  // Cleanup demo timer on unmount
+  useEffect(() => {
+    return () => {
+      if (demoTimerRef.current) clearInterval(demoTimerRef.current);
+    };
+  }, []);
+
   // ── Dossier PDF Generation ──
   const handleGenerateDossier = useCallback(async () => {
     try {
@@ -217,6 +262,7 @@ export default function DashboardPage() {
         onScenarioChange={handleScenarioChange}
         onUpload={handleUpload}
         onAnalyze={handleAnalyze}
+        onStartDemo={handleStartDemo}
         onGenerateDossier={handleGenerateDossier}
         onDownloadJSON={handleDownloadJSON}
         onDownloadCSV={handleDownloadCSV}

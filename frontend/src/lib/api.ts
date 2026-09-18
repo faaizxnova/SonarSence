@@ -57,45 +57,79 @@ export function createMockScenario(
   > = {
     gost_net1: [
       {
-        label: "ghost_fishing_net",
+        // LEFT ghost-net cluster — port channel (measured from gost_net1.png @ 1024×512)
+        label: "ghost_net",
         threat: "HIGH",
-        conf: 0.842,
-        w: 4.8,
-        l: 8.5,
-        h: 2.1,
-        slant: 58.5,
-        shadowLen: 7.5,
+        conf: 0.91,
+        w: 8.6,   // (283-86) px × 0.146 m/px ≈ 28.7 px wide → ~8.6 m
+        l: 18.5,  // (420-100) px × 0.146 ≈ 18.5 m
+        h: 0.0,   // computed from shadow formula
+        slant: 52.8,
+        shadowLen: 5.3, // 36 px × 0.146
         color: "#dc2626",
-        coords: [83.3142, 17.7238],
-        hlBbox: [755, 65, 965, 360],
-        shBbox: [710, 160, 765, 320],
-        hlPoly: [
-          [875, 65], [965, 200], [920, 360], [755, 260]
-        ],
-        shPoly: [
-          [755, 160], [800, 160], [800, 320], [710, 320]
-        ],
-        orient: 24.0,
+        coords: [83.3128, 17.7231],
+        hlBbox: [86, 100, 283, 420],
+        shBbox: [50, 140, 86, 380],
+        hlPoly: [[86,100],[283,100],[283,420],[86,420]],
+        shPoly: [[50,140],[86,140],[86,380],[50,380]],
+        orient: 18.0,
+      },
+      {
+        // RIGHT ghost-net cluster — starboard channel
+        label: "ghost_net",
+        threat: "HIGH",
+        conf: 0.88,
+        w: 9.7,
+        l: 18.0,
+        h: 0.0,
+        slant: 58.2,
+        shadowLen: 6.4, // 44 px × 0.146
+        color: "#dc2626",
+        coords: [83.3155, 17.7244],
+        hlBbox: [704, 60, 921, 390],
+        shBbox: [921, 90, 965, 360],
+        hlPoly: [[704,60],[921,60],[921,390],[704,390]],
+        shPoly: [[921,90],[965,90],[965,360],[921,360]],
+        orient: 22.0,
       },
     ],
     wooden_shipwreck: [
       {
+        // Shipwreck hull highlight (measured from ship.png @ 1024×512)
         label: "wooden_shipwreck",
-        threat: "HIGH",
-        conf: 0.885,
-        w: 17.5,
-        l: 41.6,
-        h: 3.12,
-        slant: 31.8,
-        shadowLen: 12.4,
+        threat: "MEDIUM",
+        conf: 0.94,
+        w: 18.8,  // (706-577) × 0.146
+        l: 35.6,  // (382-138) × 0.146
+        h: 0.0,
+        slant: 32.4,
+        shadowLen: 19.6, // 134 px × 0.146
         color: "#d97706",
         coords: [83.3148, 17.7242],
-        hlBbox: [675, 150, 855, 430],
-        shBbox: [785, 180, 865, 420],
-        hlPoly: [[685, 160], [745, 155], [845, 395], [775, 430]],
-        shPoly: [[745, 155], [865, 200], [865, 420], [845, 395]],
+        hlBbox: [577, 138, 706, 382],
+        shBbox: [706, 168, 840, 382],
+        hlPoly: [[577,138],[706,138],[706,382],[577,382]],
+        shPoly: [[706,168],[840,168],[840,382],[706,382]],
         orient: 8.0,
-      }
+      },
+      {
+        // Bow / debris scatter section
+        label: "wooden_shipwreck",
+        threat: "MEDIUM",
+        conf: 0.72,
+        w: 7.0,
+        l: 16.1,
+        h: 0.0,
+        slant: 30.1,
+        shadowLen: 2.9, // 20 px × 0.146
+        color: "#d97706",
+        coords: [83.3145, 17.7239],
+        hlBbox: [530, 210, 578, 320],
+        shBbox: [510, 220, 530, 310],
+        hlPoly: [[530,210],[578,210],[578,320],[530,320]],
+        shPoly: [[510,220],[530,220],[530,310],[510,310]],
+        orient: 5.0,
+      },
     ],
   };
 

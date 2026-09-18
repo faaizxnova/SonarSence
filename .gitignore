@@ -39,3 +39,9 @@ Thumbs.db
 .idea/
 .vscode/
 .vercel
+
+# ML model weights (large files — kept on Render filesystem, not in git)
+*.pt
+*.pth
+*.onnx
+*.weights
