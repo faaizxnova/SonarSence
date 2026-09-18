@@ -109,6 +109,24 @@ def load_yolo_model():
         raise RuntimeError(f"Failed to load YOLOv8 model: {e}")
 
 
+def warmup_yolo_model() -> bool:
+    """
+    Load the weights and run one throwaway inference so the first real request
+    does not pay for the model load plus lazy torch kernel initialisation.
+    Returns False if the model is unavailable — callers fall back to the
+    classical CV detector rather than failing the request.
+    """
+    try:
+        model = load_yolo_model()
+        dummy = np.zeros((WATERFALL_HEIGHT_PX, WATERFALL_WIDTH_PX, 3), dtype=np.uint8)
+        model.predict(source=dummy, imgsz=WATERFALL_WIDTH_PX, verbose=False)
+        print("[SIH26057-YOLO] Warmup inference complete — model ready.")
+        return True
+    except Exception as e:
+        print(f"[SIH26057-YOLO] Warmup skipped: {e}")
+        return False
+
+
 def preprocess_for_yolo(grayscale_image: np.ndarray) -> np.ndarray:
     """
     Prepare the preprocessed sonar waterfall image for YOLOv8 input.
@@ -116,17 +134,16 @@ def preprocess_for_yolo(grayscale_image: np.ndarray) -> np.ndarray:
     The image arriving here has already passed through:
         TVG → SRAD Diffusion → Adaptive Lee Filter → Slant-to-Ground Correction
 
-    This function applies additional sonar-specific enhancements:
-        1. CLAHE (Contrast Limited Adaptive Histogram Equalization) to boost
-           target-to-background contrast in the low-dynamic-range SSS waterfall
-        2. Convert grayscale to 3-channel BGR (YOLO expects colour or 3-ch input)
-        3. Resize to 640×640 (standard YOLOv8 inference size)
+    Resolution is deliberately left untouched: the waterfall is a 2:1 strip, so
+    forcing it into a square input squashes every target and loses the smaller
+    ones. Ultralytics letterboxes internally and reports boxes back in this
+    array's own coordinate space.
 
     Args:
         grayscale_image: Float or uint8 grayscale numpy array (H×W)
 
     Returns:
-        3-channel uint8 BGR numpy array ready for YOLO inference (640×640)
+        3-channel uint8 BGR numpy array at the input's native resolution
     """
     # Ensure uint8
     if grayscale_image.dtype != np.uint8:
@@ -136,16 +153,10 @@ def preprocess_for_yolo(grayscale_image: np.ndarray) -> np.ndarray:
         img = grayscale_image.copy()
 
     # CLAHE: boost sonar target contrast, tile grid matched to waterfall scale
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     img_enhanced = clahe.apply(img)
 
-    # Convert grayscale → 3-channel BGR for YOLO compatibility
-    img_bgr = cv2.cvtColor(img_enhanced, cv2.COLOR_GRAY2BGR)
-
-    # Resize to 640×640 for standard YOLOv8 inference
-    img_resized = cv2.resize(img_bgr, (640, 640), interpolation=cv2.INTER_LINEAR)
-
-    return img_resized
+    return cv2.cvtColor(img_enhanced, cv2.COLOR_GRAY2BGR)
 
 
 def _estimate_shadow_length_px(
@@ -185,32 +196,13 @@ def _estimate_shadow_length_px(
     return max(8, min(80, estimated_shadow))
 
 
-def _scale_bbox_to_waterfall(
-    bbox_640: List[float],
-    orig_w: int,
-    orig_h: int
-) -> List[int]:
-    """
-    Scale bounding box coordinates from 640×640 YOLO space back to
-    the original waterfall image dimensions.
+def _clamp_bbox(bbox: List[float], orig_w: int, orig_h: int) -> List[int]:
+    """Clamp a [x1, y1, x2, y2] box to the waterfall image bounds."""
+    x1 = int(bbox[0])
+    y1 = int(bbox[1])
+    x2 = int(bbox[2])
+    y2 = int(bbox[3])
 
-    Args:
-        bbox_640: [x1, y1, x2, y2] in 640×640 coordinate space
-        orig_w:   Original waterfall width in pixels
-        orig_h:   Original waterfall height in pixels
-
-    Returns:
-        [x1, y1, x2, y2] clamped to original image dimensions
-    """
-    scale_x = orig_w / 640.0
-    scale_y = orig_h / 640.0
-
-    x1 = int(bbox_640[0] * scale_x)
-    y1 = int(bbox_640[1] * scale_y)
-    x2 = int(bbox_640[2] * scale_x)
-    y2 = int(bbox_640[3] * scale_y)
-
-    # Clamp to image bounds
     x1 = max(0, min(x1, orig_w - 1))
     x2 = max(0, min(x2, orig_w - 1))
     y1 = max(0, min(y1, orig_h - 1))
@@ -221,7 +213,7 @@ def _scale_bbox_to_waterfall(
 
 def run_real_yolo_pipeline(
     corrected_image: np.ndarray,
-    conf_threshold: float = 0.25
+    conf_threshold: float = 0.15
 ) -> List[Dict]:
     """
     Run the real YOLOv8 best.pt model on a preprocessed sonar waterfall image.
@@ -240,15 +232,18 @@ def run_real_yolo_pipeline(
 
     orig_h, orig_w = corrected_image.shape[:2]
 
-    # Preprocess: CLAHE + 3-channel + resize to 640×640
+    # Preprocess: CLAHE + 3-channel, native resolution
     yolo_input = preprocess_for_yolo(corrected_image)
 
     # ── Run YOLOv8 inference ──
+    # imgsz matches the waterfall's long edge so the 2:1 strip is letterboxed
+    # rather than squashed, and boxes come back in `yolo_input` coordinates.
     results = model.predict(
         source=yolo_input,
+        imgsz=max(orig_w, orig_h),
         conf=conf_threshold,
         iou=0.45,          # NMS IoU threshold
-        max_det=10,        # Maximum detections per image
+        max_det=50,        # Allow a full debris field, not just the largest target
         verbose=False
     )
 
@@ -268,8 +263,8 @@ def run_real_yolo_pipeline(
     mid_x = orig_w / 2.0
 
     for idx, box in enumerate(boxes_data):
-        # Extract raw values
-        xyxy_640 = box.xyxy[0].tolist()          # [x1, y1, x2, y2] in 640-space
+        # Extract raw values — already in waterfall pixel coordinates
+        xyxy = box.xyxy[0].tolist()
         conf = float(box.conf[0])
         yolo_cls_id = int(box.cls[0])
 
@@ -277,8 +272,7 @@ def run_real_yolo_pipeline(
         cls_info = YOLO_CLASS_MAP.get(yolo_cls_id, YOLO_CLASS_MAP[0])
         debris_class_id = cls_info["debris_class_id"]
 
-        # Scale bbox back to original waterfall dimensions
-        hl_bbox = _scale_bbox_to_waterfall(xyxy_640, orig_w, orig_h)
+        hl_bbox = _clamp_bbox(xyxy, orig_w, orig_h)
         x1, y1, x2, y2 = hl_bbox
 
         # Guard against degenerate boxes

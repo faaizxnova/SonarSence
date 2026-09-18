@@ -14,11 +14,18 @@ import type { DetectionFeature, PipelineStage } from "@/lib/types";
 import { DEMO_SCENARIOS } from "@/lib/api";
 import { VIZ } from "@/lib/theme";
 
+// Detections are always expressed in the backend's waterfall pixel space, so
+// overlays scale against these dimensions rather than the displayed image's
+// own size — an uploaded file can be any resolution.
+const WATERFALL_WIDTH_PX = 1024;
+const WATERFALL_HEIGHT_PX = 512;
+
 interface SonarWaterfallProps {
   detections: DetectionFeature[];
   pipelineStage: PipelineStage;
   scenarioId?: string;
   customImageSrc?: string | null;
+  refreshKey?: number;
   onStageChange?: (stage: PipelineStage) => void;
   onDetectionClick?: (detection: DetectionFeature) => void;
   isProcessing?: boolean;
@@ -29,6 +36,7 @@ export default function SonarWaterfall({
   pipelineStage,
   scenarioId = "gost_net1",
   customImageSrc,
+  refreshKey = 0,
   onStageChange,
   onDetectionClick,
   isProcessing = false,
@@ -112,7 +120,7 @@ export default function SonarWaterfall({
         };
       }
     }
-  }, [pipelineStage, scenarioId, customImageSrc]);
+  }, [pipelineStage, scenarioId, customImageSrc, refreshKey]);
 
   useEffect(() => {
     // loadImage kicks off an async image fetch and resets the loading
@@ -135,8 +143,8 @@ export default function SonarWaterfall({
     canvas.height = rect.height;
 
     const img = imageRef.current;
-    const scaleX = canvas.width / img.width;
-    const scaleY = canvas.height / img.height;
+    const scaleX = canvas.width / WATERFALL_WIDTH_PX;
+    const scaleY = canvas.height / WATERFALL_HEIGHT_PX;
 
     // Clear and draw the sonar waterfall image
     ctx.fillStyle = VIZ.surface;
@@ -186,8 +194,8 @@ export default function SonarWaterfall({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const scaleX = canvas.width / imageRef.current.width;
-    const scaleY = canvas.height / imageRef.current.height;
+    const scaleX = canvas.width / WATERFALL_WIDTH_PX;
+    const scaleY = canvas.height / WATERFALL_HEIGHT_PX;
 
     for (const det of detections) {
       const [x1, y1, x2, y2] = det.properties.highlight_bbox;

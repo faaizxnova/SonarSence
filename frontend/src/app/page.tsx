@@ -51,6 +51,9 @@ export default function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMapVisible, setIsMapVisible] = useState(false);
+  // Bumped whenever a pipeline run finishes, so the waterfall refetches its
+  // stage imagery instead of keeping the frame from the previous dataset.
+  const [resultVersion, setResultVersion] = useState(0);
 
   const isSimulated = geojson?.metadata.data_source === "simulated";
 
@@ -61,6 +64,7 @@ export default function DashboardPage() {
     try {
       const data = await uploadSonarData(null, scenarioId);
       setGeojson(data);
+      setResultVersion((v) => v + 1);
       setStatus("complete");
     } catch (err) {
       console.error("Scenario load failed:", err);
@@ -78,6 +82,7 @@ export default function DashboardPage() {
         const initialData = await getDetections(selectedScenario);
         if (cancelled) return;
         setGeojson(initialData);
+        setResultVersion((v) => v + 1);
         setStatus("complete");
       } catch (err) {
         if (cancelled) return;
@@ -122,6 +127,7 @@ export default function DashboardPage() {
           const result = await uploadSonarData(null, selectedScenario);
           setGeojson(result);
         }
+        setResultVersion((v) => v + 1);
         setStatus("complete");
       } catch (error) {
         console.error("Upload failed:", error);
@@ -280,6 +286,7 @@ export default function DashboardPage() {
               pipelineStage={pipelineStage}
               scenarioId={selectedScenario}
               customImageSrc={customImageSrc}
+              refreshKey={resultVersion}
               onStageChange={setPipelineStage}
               onDetectionClick={handleDetectionSelect}
               isProcessing={

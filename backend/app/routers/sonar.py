@@ -36,7 +36,6 @@ from app.preprocessing.range_correction import slant_to_ground_range_correction
 from app.inference.detector import run_simulated_yolo_pipeline
 from app.inference.mensuration import run_mensuration_pipeline
 from app.inference.geojson_builder import build_geojson_collection, _to_native
-# Real YOLOv8 model — only imported/used for user-uploaded images
 from app.inference.yolov8_detector import run_real_yolo_pipeline
 
 router = APIRouter(prefix="/api/v1", tags=["Sonar Processing"])
@@ -57,69 +56,78 @@ _session_cache = {
     "geojson": None,            # GeoJSON FeatureCollection
 }
 
+# Stage images + results already computed for a scenario, so re-selecting a
+# dataset or flipping between pipeline stages never re-runs inference.
+_STAGE_KEYS = (
+    "raw_image", "tvg_image", "srad_image", "filtered_image",
+    "corrected_image", "annotated_image", "mvb_image",
+)
+_scenario_results: dict = {}
+_png_cache: dict = {}
 
-def _get_demo_ground_truth(scenario: str):
-    if scenario in ["gost_net1", "ghost_net", "test_1"]:
-        return [{
-            "target_id": 0,
-            "class_id": 0,
-            "confidence": 0.842,
-            "highlight_bbox": [755, 65, 965, 360],
-            "shadow_bbox": [710, 160, 765, 320],
-            "shadow_length_px": 55,
-            "center_px": [860, 212],
-            "slant_range_m": 58.5,
-            "highlight_polygon": [[875, 65], [965, 200], [920, 360], [755, 260]],
-            "shadow_polygon": [[755, 160], [800, 160], [800, 320], [710, 320]],
-        }]
-    elif scenario in ["baseline_survey", "initial_sample", "sonar_discarded_tires_reef"]:
-        return [{
-            "target_id": 0,
-            "class_id": 11,
-            "confidence": 0.794,
-            "highlight_bbox": [220, 280, 254, 314],
-            "shadow_bbox": [178, 280, 220, 314],
-            "shadow_length_px": 42,
-            "center_px": [237, 297],
-            "slant_range_m": 24.0,
-            "highlight_polygon": [[220, 297], [228, 282], [246, 280], [254, 297], [246, 314], [228, 312]],
-            "shadow_polygon": [[178, 284], [220, 280], [220, 314], [178, 310]],
-        }]
-    elif scenario in ["test_sonar", "shipping_containers", "sonar_shipping_containers"]:
-        return [{
-            "target_id": 0,
-            "class_id": 1,
-            "confidence": 0.912,
-            "highlight_bbox": [221, 118, 278, 159],
-            "shadow_bbox": [170, 118, 221, 159],
-            "shadow_length_px": 51,
-            "center_px": [250, 138],
-            "slant_range_m": 42.5,
-            "highlight_polygon": [[221, 118], [278, 122], [278, 159], [221, 155]],
-            "shadow_polygon": [[170, 118], [221, 118], [221, 155], [170, 155]],
-        }]
-    elif scenario in ["wooden_shipwreck", "shipwreck", "sonar_wooden_shipwreck", "ship"]:
-        return [{
-            "target_id": 0,
-            "class_id": 8,
-            "confidence": 0.885,
-            "highlight_bbox": [675, 150, 855, 430],
-            "shadow_bbox": [785, 180, 865, 420],
-            "shadow_length_px": 80,
-            "center_px": [765, 290],
-            "slant_range_m": 33.5,
-            "highlight_polygon": [[685, 160], [745, 155], [845, 395], [775, 430]],
-            "shadow_polygon": [[745, 155], [865, 200], [865, 420], [845, 395]],
-        }]
+
+def _cache_scenario_result(scenario: str) -> None:
+    """Snapshot the current pipeline output so this scenario is instant next time."""
+    _scenario_results[scenario] = {
+        key: _session_cache.get(key) for key in _STAGE_KEYS
+    }
+    _scenario_results[scenario]["detections"] = _session_cache.get("detections")
+    _scenario_results[scenario]["geojson"] = _session_cache.get("geojson")
+    # A re-run replaces this scenario's imagery, so its encoded PNGs are stale.
+    for key in [k for k in _png_cache if k[0] == scenario]:
+        del _png_cache[key]
+
+
+def _restore_scenario_result(scenario: str) -> bool:
+    """Reload a previously computed scenario into the active session cache."""
+    cached = _scenario_results.get(scenario)
+    if not cached or cached.get("geojson") is None:
+        return False
+    _session_cache.update(cached)
+    _session_cache["current_scenario"] = scenario
+    _session_cache["is_upload"] = scenario == "custom_upload"
+    return True
+
+
+SCENARIO_ALIAS_MAP = {
+    "baseline_survey": "sonar_discarded_tires_reef",
+    "test_sonar": "sonar_shipping_containers",
+    "initial_sample": "sonar_discarded_tires_reef",
+    "ghost_net": "gost_net1",
+    "wooden_shipwreck": "ship",
+    "ship": "ship",
+    "shipwreck": "sonar_wooden_shipwreck",
+}
+
+
+# DEBRIS_CLASSES id each preset dataset is known to contain.
+SCENARIO_CLASS_ID = {
+    "gost_net1": 0,
+    "ghost_net": 0,
+    "wooden_shipwreck": 8,
+    "ship": 8,
+    "shipwreck": 8,
+}
+
+
+def _load_scenario_image(scenario: str):
+    """Locate and load a preset scenario's source image, or None if absent."""
+    import os
+    resolved = SCENARIO_ALIAS_MAP.get(scenario, scenario)
+    roots = ["", "../", "sample_sonar_data/", "../sample_sonar_data/",
+             "frontend/public/samples/", "../frontend/public/samples/",
+             "frontend/public/", "../frontend/public/"]
+    for root in roots:
+        for name in (f"{resolved}.png", f"sonar_{resolved}.png"):
+            path = f"{root}{name}"
+            if os.path.exists(path):
+                img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    return cv2.resize(img, (WATERFALL_WIDTH_PX, WATERFALL_HEIGHT_PX))
     return None
 
 
-def _run_full_pipeline(
-    raw_image: np.ndarray,
-    ground_truth: list = None,
-    scenario: str = None,
-    use_real_model: bool = False
-) -> dict:
+def _run_full_pipeline(raw_image: np.ndarray, scenario: str = None) -> dict:
     """
     Execute the complete 7-stage acoustic preprocessing + inference pipeline.
     """
@@ -166,13 +174,24 @@ def _run_full_pipeline(
     _session_cache["corrected_image"] = corrected
     
     # ── Stage 5: YOLOv8 Inference ──
-    # use_real_model=True ONLY when a user uploads a file.
-    # All preset scenarios continue using the simulated pipeline.
-    if use_real_model:
-        print("[SIH26057] User upload detected — running real YOLOv8 (best.pt) inference.")
+    # The trained best.pt model runs for every scenario, so a preset shows all
+    # the targets actually present in the image instead of one scripted box.
+    # The classical CV detector stays as a fallback for when the model finds
+    # nothing or its weights are unavailable.
+    detections = []
+    try:
         detections = run_real_yolo_pipeline(corrected)
-    else:
-        detections = run_simulated_yolo_pipeline(corrected, ground_truth)
+    except Exception as e:
+        print(f"[SIH26057] YOLOv8 unavailable ({e}) — falling back to CV detector.")
+
+    if not detections:
+        detections = run_simulated_yolo_pipeline(corrected)
+        # The classical detector classifies purely on size, so anchor a preset's
+        # targets to the class that dataset is known to contain.
+        preset_class_id = SCENARIO_CLASS_ID.get(scenario)
+        if preset_class_id is not None:
+            for det in detections:
+                det["class_id"] = preset_class_id
     
     # ── Stage 6: Physical Mensuration & MVB 3D Bounding ──
     enriched = run_mensuration_pipeline(detections)
@@ -312,7 +331,6 @@ async def upload_sonar_data(
     """
     Upload simulated or authentic .XTF sonar data and run the full 7-stage pipeline.
     """
-    import os
     if file is not None:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -331,61 +349,29 @@ async def upload_sonar_data(
         )
         _session_cache["current_scenario"] = "custom_upload"
         _session_cache["is_upload"] = True
-        # ── Real YOLOv8 model is ONLY triggered here for user uploads ──
         geojson = _run_full_pipeline(
             raw_image,
-            ground_truth=None,
-            scenario=scenario,
-            use_real_model=True
+            scenario="custom_upload"
         )
+        _cache_scenario_result("custom_upload")
+    elif _restore_scenario_result(scenario):
+        geojson = _session_cache["geojson"]
     else:
-        # Check for specific scenario image file
-        scenario_alias_map = {
-            "baseline_survey": "sonar_discarded_tires_reef",
-            "test_sonar": "sonar_shipping_containers",
-            "initial_sample": "sonar_discarded_tires_reef",
-            "ghost_net": "gost_net1",
-            "wooden_shipwreck": "ship",
-            "ship": "ship",
-            "shipwreck": "sonar_wooden_shipwreck",
-        }
-        resolved_name = scenario_alias_map.get(scenario, scenario)
-        sample_paths = [
-            f"{resolved_name}.png",
-            f"../{resolved_name}.png",
-            f"sample_sonar_data/{resolved_name}.png",
-            f"../sample_sonar_data/{resolved_name}.png",
-            f"frontend/public/samples/{resolved_name}.png",
-            f"../frontend/public/samples/{resolved_name}.png",
-            f"sample_sonar_data/sonar_{resolved_name}.png",
-            f"../sample_sonar_data/sonar_{resolved_name}.png",
-            f"frontend/public/samples/sonar_{resolved_name}.png",
-            f"../frontend/public/samples/sonar_{resolved_name}.png",
-            f"frontend/public/{resolved_name}.png",
-            f"../frontend/public/{resolved_name}.png",
-        ]
-        loaded_img = None
-        for sp in sample_paths:
-            if os.path.exists(sp):
-                loaded_img = cv2.imread(sp, cv2.IMREAD_GRAYSCALE)
-                if loaded_img is not None:
-                    break
-                    
-        if loaded_img is not None:
-            raw_image = cv2.resize(loaded_img, (WATERFALL_WIDTH_PX, WATERFALL_HEIGHT_PX))
-            _session_cache["current_scenario"] = scenario
-            _session_cache["is_upload"] = False
-            geojson = _run_full_pipeline(raw_image, ground_truth=_get_demo_ground_truth(scenario), scenario=scenario)
-        else:
-            raw_image, ground_truth = generate_synthetic_sonar_waterfall(
+        raw_image = _load_scenario_image(scenario)
+        if raw_image is None:
+            raw_image, _ = generate_synthetic_sonar_waterfall(
                 width=WATERFALL_WIDTH_PX,
                 height=WATERFALL_HEIGHT_PX,
                 num_targets=4
             )
-            _session_cache["current_scenario"] = scenario
-            _session_cache["is_upload"] = False
-            geojson = _run_full_pipeline(raw_image, ground_truth=_get_demo_ground_truth(scenario), scenario=scenario)
-    
+        _session_cache["current_scenario"] = scenario
+        _session_cache["is_upload"] = False
+        geojson = _run_full_pipeline(
+            raw_image,
+            scenario=scenario
+        )
+        _cache_scenario_result(scenario)
+
     return JSONResponse(content=geojson)
 
 
@@ -407,51 +393,26 @@ async def get_sonar_image(
     Retrieve the sonar waterfall image at a specific processing stage.
     Supports all 7 acoustic preprocessing stages for both presets and uploaded imagery.
     """
-    import os
-    is_custom_upload = _session_cache.get("is_upload", False) and _session_cache.get("current_scenario") == "custom_upload"
-    print(f"[DEBUG] get_sonar_image called with stage={stage}, scenario={scenario}")
-    print(f"[DEBUG] _session_cache current_scenario={_session_cache.get('current_scenario')}, is_upload={_session_cache.get('is_upload')}")
-    print(f"[DEBUG] is_custom_upload={is_custom_upload}")
+    requested = scenario if scenario not in (None, "undefined", "upload") else _session_cache.get("current_scenario")
 
-    # Only reload preset scenario if user switched away from custom upload to a specific preset
-    if scenario and scenario not in ["custom_upload", "upload", "undefined"] and not is_custom_upload:
-        if _session_cache["raw_image"] is None or _session_cache.get("current_scenario") != scenario:
-            scenario_alias_map = {
-                "baseline_survey": "sonar_discarded_tires_reef",
-            "test_sonar": "sonar_shipping_containers",
-                "initial_sample": "sonar_discarded_tires_reef",
-                "ghost_net": "gost_net1",
-            "wooden_shipwreck": "ship",
-            "ship": "ship",
-            "shipwreck": "sonar_wooden_shipwreck",
-            }
-            resolved_name = scenario_alias_map.get(scenario, scenario)
-            sample_paths = [
-                f"{resolved_name}.png",
-                f"../{resolved_name}.png",
-                f"sample_sonar_data/{resolved_name}.png",
-                f"../sample_sonar_data/{resolved_name}.png",
-                f"sample_sonar_data/sonar_{resolved_name}.png",
-                f"../sample_sonar_data/sonar_{resolved_name}.png",
-                f"frontend/public/samples/{resolved_name}.png",
-                f"../frontend/public/samples/{resolved_name}.png",
-                f"frontend/public/samples/sonar_{resolved_name}.png",
-                f"../frontend/public/samples/sonar_{resolved_name}.png",
-                f"frontend/public/{resolved_name}.png",
-                f"../frontend/public/{resolved_name}.png",
-            ]
-            loaded_img = None
-            for sp in sample_paths:
-                if os.path.exists(sp):
-                    loaded_img = cv2.imread(sp, cv2.IMREAD_GRAYSCALE)
-                    if loaded_img is not None:
-                        break
-            if loaded_img is not None:
-                raw_image = cv2.resize(loaded_img, (WATERFALL_WIDTH_PX, WATERFALL_HEIGHT_PX))
-                _session_cache["current_scenario"] = scenario
+    # A custom upload only ever lives in the cache — never regenerate it from a
+    # preset sample, or the stage views would show a different image than the
+    # one the boxes were computed on.
+    if requested == "custom_upload":
+        if _session_cache.get("current_scenario") != "custom_upload":
+            _restore_scenario_result("custom_upload")
+    elif requested and _session_cache.get("current_scenario") != requested:
+        if not _restore_scenario_result(requested):
+            raw_image = _load_scenario_image(requested)
+            if raw_image is not None:
+                _session_cache["current_scenario"] = requested
                 _session_cache["is_upload"] = False
-                _run_full_pipeline(raw_image, ground_truth=_get_demo_ground_truth(scenario), scenario=scenario)
-            
+                _run_full_pipeline(
+                    raw_image,
+                    scenario=requested
+                )
+                _cache_scenario_result(requested)
+
     stage_map = {
         "raw": "raw_image",
         "tvg": "tvg_image",
@@ -466,30 +427,33 @@ async def get_sonar_image(
     cache_key = stage_map.get(stage.lower(), "annotated_image")
     image = _session_cache.get(cache_key)
     
-    if image is None:
-        # Load user's actual ghost net image as primary source only if scenario is ghost_net or gost_net1
-        if scenario in ["ghost_net", "gost_net1", None]:
-            for fallback_path in ["gost_net1.png", "../gost_net1.png", "backend/gost_net1.png"]:
-                if os.path.exists(fallback_path):
-                    f_img = cv2.imread(fallback_path, cv2.IMREAD_GRAYSCALE)
-                    if f_img is not None:
-                        raw_image = cv2.resize(f_img, (WATERFALL_WIDTH_PX, WATERFALL_HEIGHT_PX))
-                        _run_full_pipeline(raw_image, ground_truth=_get_demo_ground_truth("gost_net1"), scenario="gost_net1")
-                        _session_cache["current_scenario"] = "gost_net1"
-                        image = _session_cache.get(cache_key)
-                        break
-                    
-    if image is None:
-        raw_image, ground_truth = generate_synthetic_sonar_waterfall()
-        _run_full_pipeline(raw_image, ground_truth, scenario=scenario)
+    if image is None and requested != "custom_upload":
+        # Nothing cached yet (fresh process) — build the default scenario once.
+        fallback_scenario = requested or "gost_net1"
+        raw_image = _load_scenario_image(fallback_scenario)
+        if raw_image is None:
+            raw_image, _ = generate_synthetic_sonar_waterfall()
+        _session_cache["current_scenario"] = fallback_scenario
+        _session_cache["is_upload"] = False
+        _run_full_pipeline(
+            raw_image,
+            scenario=fallback_scenario
+        )
+        _cache_scenario_result(fallback_scenario)
         image = _session_cache.get(cache_key)
-    
+
     if image is None:
         raise HTTPException(status_code=404, detail=f"Image stage '{stage}' not available")
-    
-    _, buffer = cv2.imencode(".png", image)
+
+    png_key = (_session_cache.get("current_scenario"), cache_key)
+    buffer = _png_cache.get(png_key)
+    if buffer is None:
+        _, encoded = cv2.imencode(".png", image)
+        buffer = encoded.tobytes()
+        _png_cache[png_key] = buffer
+
     return StreamingResponse(
-        io.BytesIO(buffer.tobytes()),
+        io.BytesIO(buffer),
         media_type="image/png",
         headers={"Cache-Control": "no-cache"}
     )
@@ -499,9 +463,9 @@ async def get_sonar_image(
 async def generate_report():
     """Generate a detection summary report with full TVG/SRAD/Lee/Slant/MVB metrics."""
     if _session_cache["detections"] is None:
-        raw_image, ground_truth = generate_synthetic_sonar_waterfall()
-        _run_full_pipeline(raw_image, ground_truth, scenario=scenario)
-    
+        raw_image, _ = generate_synthetic_sonar_waterfall()
+        _run_full_pipeline(raw_image, scenario="gost_net1")
+
     detections = _session_cache["detections"]
     geojson = _session_cache["geojson"]
     

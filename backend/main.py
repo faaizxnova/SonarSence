@@ -11,9 +11,21 @@ Architecture:
     - All endpoints under /api/v1 prefix
 """
 
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import sonar
+from app.inference.yolov8_detector import warmup_yolo_model
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load and warm the detector off the event loop so the first upload does
+    # not pay for weight loading plus lazy torch kernel init.
+    asyncio.create_task(asyncio.to_thread(warmup_yolo_model))
+    yield
 
 # ─────────────────────────────────────────────────────────────
 # Application Factory
@@ -29,6 +41,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ─────────────────────────────────────────────────────────────
