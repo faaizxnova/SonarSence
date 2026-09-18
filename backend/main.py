@@ -41,6 +41,7 @@ app.add_middleware(
         "http://localhost:3000",     # Next.js dev server
         "http://127.0.0.1:3000",
         "http://localhost:3001",     # Alternate port
+        "https://sonar-sence.vercel.app",  # Production frontend (Vercel)
     ],
     allow_credentials=True,
     allow_methods=["*"],
