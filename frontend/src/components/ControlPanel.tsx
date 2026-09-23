@@ -8,10 +8,12 @@
 
 import React, { useRef, useState } from "react";
 import type { PipelineStatus } from "@/lib/types";
-import { DEMO_SCENARIOS } from "@/lib/api";
+import { DEMO_SCENARIOS, type BackendHealth } from "@/lib/api";
 
 interface ControlPanelProps {
   status: PipelineStatus;
+  backendHealth: BackendHealth | null;
+  onRecheckBackend: () => void;
   detectionCount: number;
   selectedScenario: string;
   onScenarioChange: (scenarioId: string) => void;
@@ -29,6 +31,8 @@ interface ControlPanelProps {
 
 export default function ControlPanel({
   status,
+  backendHealth,
+  onRecheckBackend,
   detectionCount,
   selectedScenario,
   onScenarioChange,
@@ -302,6 +306,43 @@ export default function ControlPanel({
 
       {/* ── Right: Audio Toggle & Status ── */}
       <div className="flex items-center gap-2.5">
+        {/* Backend Connectivity Indicator */}
+        <button
+          onClick={onRecheckBackend}
+          title={
+            backendHealth
+              ? `${backendHealth.apiBase}\n${
+                  backendHealth.connected
+                    ? `Connected in ${backendHealth.latencyMs} ms — detections come from the FastAPI pipeline.`
+                    : `${backendHealth.detail} — showing the built-in offline demo dataset, not real inference.`
+                }\nClick to re-check.`
+              : "Checking backend..."
+          }
+          aria-label="Backend connection status — click to re-check"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[11px] font-bold border cursor-pointer transition-colors ${
+            !backendHealth
+              ? "bg-transparent text-[var(--text-muted)] border-[var(--border-subtle)]"
+              : backendHealth.connected
+              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+              : "bg-red-50 text-red-700 border-red-300"
+          }`}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              !backendHealth
+                ? "bg-slate-400 animate-pulse"
+                : backendHealth.connected
+                ? "bg-emerald-500"
+                : "bg-red-500 animate-pulse"
+            }`}
+          />
+          {!backendHealth
+            ? "BACKEND: CHECKING"
+            : backendHealth.connected
+            ? `BACKEND: LIVE ${backendHealth.latencyMs}ms`
+            : "BACKEND: OFFLINE"}
+        </button>
+
         {/* Audio Ping SFX Toggle */}
         <button
           onClick={() => setAudioEnabled(!audioEnabled)}

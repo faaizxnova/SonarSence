@@ -31,10 +31,10 @@ PIXEL_RESOLUTION_M = (2 * SLANT_RANGE_MAX_M) / WATERFALL_WIDTH_PX  # ~0.146 m/px
 # ─────────────────────────────────────────────────────────────
 # SURVEY AREA — Simulated WGS84 Origin
 # Set to a realistic coastal survey zone in the Bay of Bengal
-# (off the coast of Visakhapatnam, India — relevant for MoES)
+# (centre of the Bay of Bengal, Indian Ocean — relevant for MoES)
 # ─────────────────────────────────────────────────────────────
-SURVEY_ORIGIN_LAT = 17.7215              # Latitude (degrees N)
-SURVEY_ORIGIN_LON = 83.3119              # Longitude (degrees E)
+SURVEY_ORIGIN_LAT = 15.0000              # Latitude (degrees N) — central Bay of Bengal
+SURVEY_ORIGIN_LON = 88.0000              # Longitude (degrees E)
 SURVEY_HEADING_DEG = 45.0                # Survey line bearing (degrees from N)
 
 # Approximate meters-per-degree at this latitude

@@ -3,7 +3,8 @@ node_modules/
 .pnp/
 .pnp.*
 .yarn/*
-
+ 
+ssnr
 # Python
 __pycache__/
 *.pyc

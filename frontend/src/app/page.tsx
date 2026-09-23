@@ -28,7 +28,14 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { generateClearanceDossier } from "@/components/DossierGenerator";
 import { downloadReportJSON, downloadReportCSV } from "@/lib/export";
 
-import { uploadSonarData, generateReport, getDetections, createMockScenario } from "@/lib/api";
+import {
+  uploadSonarData,
+  generateReport,
+  getDetections,
+  createMockScenario,
+  healthCheck,
+  type BackendHealth,
+} from "@/lib/api";
 import type {
   DetectionCollection,
   DetectionFeature,
@@ -54,6 +61,16 @@ export default function DashboardPage() {
   // Bumped whenever a pipeline run finishes, so the waterfall refetches its
   // stage imagery instead of keeping the frame from the previous dataset.
   const [resultVersion, setResultVersion] = useState(0);
+  const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
+
+  const checkBackend = useCallback(async () => {
+    setBackendHealth(null);
+    setBackendHealth(await healthCheck());
+  }, []);
+
+  useEffect(() => {
+    checkBackend();
+  }, [checkBackend]);
   // Ref to cancel any in-progress demo tour timers
   const demoTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -257,6 +274,8 @@ export default function DashboardPage() {
       {/* ── Top: Command & Control Panel ── */}
       <ControlPanel
         status={status}
+        backendHealth={backendHealth}
+        onRecheckBackend={checkBackend}
         detectionCount={detections.length}
         selectedScenario={selectedScenario}
         onScenarioChange={handleScenarioChange}
@@ -286,7 +305,10 @@ export default function DashboardPage() {
           {isSimulated && (
             <span className="ml-auto flex items-center gap-1.5 text-[var(--text-muted)]">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-live)]" />
-              Simulated data — backend unreachable, showing offline demo dataset
+              Simulated data — could not reach {backendHealth?.apiBase ?? "the API"}
+              {backendHealth?.detail ? ` (${backendHealth.detail})` : ""}; showing the
+              offline demo dataset, not real inference
+
             </span>
           )}
         </div>

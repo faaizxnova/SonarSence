@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional
 
 from app.config import (
+    SURVEY_ORIGIN_LAT, SURVEY_ORIGIN_LON,
     WATERFALL_WIDTH_PX, WATERFALL_HEIGHT_PX,
     TOWFISH_ALTITUDE_M, SLANT_RANGE_MAX_M,
     LEE_FILTER_WINDOW_SIZE, SRAD_NUM_ITERS,
@@ -584,8 +585,8 @@ async def generate_report():
             "frequency_khz": 600,
             "towfish_altitude_m": TOWFISH_ALTITUDE_M,
             "slant_range_max_m": SLANT_RANGE_MAX_M,
-            "survey_origin_lat": 17.7215,
-            "survey_origin_lon": 83.3119,
+            "survey_origin_lat": SURVEY_ORIGIN_LAT,
+            "survey_origin_lon": SURVEY_ORIGIN_LON,
         },
         "preprocessing_suite": {
             "tvg_gain": f"20*log10(R) + 2*{TVG_ALPHA_DB_M}*R (dB)",

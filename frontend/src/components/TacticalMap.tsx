@@ -12,6 +12,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import type { DetectionCollection, DetectionFeature } from "@/lib/types";
 import { VIZ } from "@/lib/theme";
+import { SURVEY_ORIGIN } from "@/lib/api";
 
 interface TacticalMapProps {
   geojson: DetectionCollection | null;
@@ -20,7 +21,7 @@ interface TacticalMapProps {
 }
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
-const DEFAULT_CENTER: [number, number] = [83.3119, 17.7215]; // Bay of Bengal, Vizag
+const DEFAULT_CENTER: [number, number] = SURVEY_ORIGIN; // Centre of the Bay of Bengal
 const DEFAULT_ZOOM = 13;
 
 export default function TacticalMap({

@@ -12,7 +12,15 @@ import type {
   ReportData,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Survey origin [lon, lat] — centre of the Bay of Bengal (Indian Ocean).
+// Must match SURVEY_ORIGIN_LAT/LON in backend/app/config.py.
+export const SURVEY_ORIGIN: [number, number] = [88.0, 15.0];
+const fromOrigin = (dLon: number, dLat: number): [number, number] => [
+  SURVEY_ORIGIN[0] + dLon,
+  SURVEY_ORIGIN[1] + dLat,
+];
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // Sample sonar scenarios (offline-safe: every image ships in /public/samples)
 export const DEMO_SCENARIOS = [
@@ -67,7 +75,7 @@ export function createMockScenario(
         slant: 52.8,
         shadowLen: 5.3, // 36 px × 0.146
         color: "#dc2626",
-        coords: [83.3128, 17.7231],
+        coords: fromOrigin(0.0009, 0.0016),
         hlBbox: [86, 100, 283, 420],
         shBbox: [50, 140, 86, 380],
         hlPoly: [[86,100],[283,100],[283,420],[86,420]],
@@ -85,7 +93,7 @@ export function createMockScenario(
         slant: 58.2,
         shadowLen: 6.4, // 44 px × 0.146
         color: "#dc2626",
-        coords: [83.3155, 17.7244],
+        coords: fromOrigin(0.0036, 0.0029),
         hlBbox: [704, 60, 921, 390],
         shBbox: [921, 90, 965, 360],
         hlPoly: [[704,60],[921,60],[921,390],[704,390]],
@@ -105,7 +113,7 @@ export function createMockScenario(
         slant: 32.4,
         shadowLen: 19.6, // 134 px × 0.146
         color: "#d97706",
-        coords: [83.3148, 17.7242],
+        coords: fromOrigin(0.0029, 0.0027),
         hlBbox: [577, 138, 706, 382],
         shBbox: [706, 168, 840, 382],
         hlPoly: [[577,138],[706,138],[706,382],[577,382]],
@@ -123,7 +131,7 @@ export function createMockScenario(
         slant: 30.1,
         shadowLen: 2.9, // 20 px × 0.146
         color: "#d97706",
-        coords: [83.3145, 17.7239],
+        coords: fromOrigin(0.0026, 0.0024),
         hlBbox: [530, 210, 578, 320],
         shBbox: [510, 220, 530, 310],
         hlPoly: [[530,210],[578,210],[578,320],[530,320]],
@@ -218,7 +226,7 @@ export function createMockScenario(
       system: "SonarSense — AI-Powered Marine Debris Detection",
       scenario: scenarioId,
       total_detections: features.length,
-      survey_origin: [83.3119, 17.7215],
+      survey_origin: SURVEY_ORIGIN,
       frequency_khz: 600,
       towfish_altitude_m: 8.0,
       slant_range_max_m: 75.0,
@@ -304,8 +312,8 @@ export async function generateReport(
       frequency_khz: 600,
       towfish_altitude_m: 8.0,
       slant_range_max_m: 75.0,
-      survey_origin_lat: 17.7215,
-      survey_origin_lon: 83.3119,
+      survey_origin_lat: SURVEY_ORIGIN[1],
+      survey_origin_lon: SURVEY_ORIGIN[0],
     },
     preprocessing_suite: {
       tvg_gain: "20*log10(R) + 2*0.05*R (dB)",
@@ -334,12 +342,39 @@ export async function generateReport(
   };
 }
 
-export async function healthCheck(): Promise<{ status: string; system: string }> {
+export interface BackendHealth {
+  connected: boolean;
+  apiBase: string;
+  latencyMs?: number;
+  detail?: string;
+}
+
+/**
+ * Probe the FastAPI backend. Reports the true reachability of the API rather
+ * than masking a failure, so the UI can tell live inference apart from the
+ * offline fallback dataset.
+ */
+export async function healthCheck(timeoutMs = 8000): Promise<BackendHealth> {
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${API_BASE}/api/v1/health`);
-    if (response.ok) {
-      return await response.json();
+    const response = await fetch(`${API_BASE}/api/v1/health`, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return { connected: false, apiBase: API_BASE, detail: `HTTP ${response.status}` };
     }
-  } catch {}
-  return { status: "operational", system: "SonarSense Processing Engine" };
+    await response.json();
+    return { connected: true, apiBase: API_BASE, latencyMs: Date.now() - started };
+  } catch (err) {
+    const detail =
+      err instanceof DOMException && err.name === "AbortError"
+        ? `No response in ${timeoutMs / 1000}s`
+        : "Unreachable (network/CORS)";
+    return { connected: false, apiBase: API_BASE, detail };
+  } finally {
+    clearTimeout(timer);
+  }
 }

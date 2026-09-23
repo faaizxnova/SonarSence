@@ -12,6 +12,7 @@ Architecture:
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,12 +20,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import sonar
 from app.inference.yolov8_detector import warmup_yolo_model
 
+# Loading torch + the YOLO weights costs several hundred MB of RSS. On a small
+# instance that is enough to get the process OOM-killed during boot, which the
+# platform surfaces as a 502 on every request. Warming up is therefore opt-in;
+# by default the model loads lazily on first inference.
+WARMUP_MODEL_ON_STARTUP = os.getenv("WARMUP_MODEL", "").lower() in ("1", "true", "yes")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load and warm the detector off the event loop so the first upload does
-    # not pay for weight loading plus lazy torch kernel init.
-    asyncio.create_task(asyncio.to_thread(warmup_yolo_model))
+    if WARMUP_MODEL_ON_STARTUP:
+        asyncio.create_task(asyncio.to_thread(warmup_yolo_model))
     yield
 
 # ─────────────────────────────────────────────────────────────
@@ -56,6 +62,8 @@ app.add_middleware(
         "http://localhost:3001",     # Alternate port
         "https://sonar-sence.vercel.app",  # Production frontend (Vercel)
     ],
+    # Vercel gives every preview deployment its own hostname, so match those too.
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
