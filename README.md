@@ -16,11 +16,11 @@ Approximate final validation values, read from the training curves above:
 |---|---|
 | Precision | ~0.78 |
 | Recall | ~0.71 |
-| **F1 Score** | **~0.74** |
+| **F1 Score** | ![F1 Score](https://img.shields.io/badge/F1_Score-~0.74-brightgreen?style=flat-square) |
 | mAP@50 | ~0.72 |
 | mAP@50-95 | ~0.52 |
 
-**F1 Score of ~0.74 (74%)** — this is the harmonic mean of precision and recall, meaning the model strikes a strong and balanced trade-off between avoiding false alarms (precision 78%) and not missing real targets (recall 71%). A score above 0.70 is considered strong for multi-class sonar object detection, where targets vary widely in size and acoustic signature.
+![F1 Score](https://img.shields.io/badge/F1_Score-~0.74_%2874%25%29-brightgreen?style=for-the-badge) **F1 Score of ~0.74 (74%)** — this is the harmonic mean of precision and recall, meaning the model strikes a strong and balanced trade-off between avoiding false alarms (precision 78%) and not missing real targets (recall 71%). A score above 0.70 is considered strong for multi-class sonar object detection, where targets vary widely in size and acoustic signature.
 
 The trained weights (`backend/best.pt`) detect 4 classes:
 
